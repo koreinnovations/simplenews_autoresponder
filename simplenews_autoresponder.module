@@ -1,0 +1,150 @@
+<?php
+
+/**
+ * Implementation of hook_perm().
+ */
+function simplenews_autoresponder_perm() {
+  return array('administer simplenews autoresponders');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function simplenews_autoresponder_menu() {
+
+  $items = array();
+
+  $items['admin/settings/simplenews_autoresponder'] = array(
+      'title' => t('Simplenews autoresponder'),
+      'description' => t('Configuration page for Simplenews autoresponder module.'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('simplenews_autoresponder_admin'),
+      'access arguments' => array('administer simplenews autoresponders'),
+      'type' => MENU_NORMAL_ITEM,
+      'file' => 'includes/admin.inc',
+  );
+
+  $items['admin/settings/simplenews_autoresponder/add'] = array(
+      'title' => t('Simplenews autoresponder'),
+      'description' => t('Add new autoresponder.'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('simplenews_autoresponder_admin_edit'),
+      'access arguments' => array('administer simplenews autoresponders'),
+      'type' => MENU_NORMAL_ITEM,
+      'file' => 'includes/admin.inc',
+  );
+
+  $items['admin/settings/simplenews_autoresponder/edit/%'] = array(
+      'title' => t('Edit autoresponder'),
+      'description' => t('Edit given autoresponder.'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('simplenews_autoresponder_admin_edit', 4),
+      'access arguments' => array('administer simplenews autoresponders'),
+      'type' => MENU_NORMAL_ITEM,
+      'file' => 'includes/admin.inc',
+  );
+
+  $items['admin/settings/simplenews_autoresponder/delete/%'] = array(
+      'title' => t('Delete autoresponder'),
+      'description' => t('Delete given autoresponder.'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('simplenews_autoresponder_admin_delete', 4),
+      'access arguments' => array('administer simplenews autoresponders'),
+      'type' => MENU_NORMAL_ITEM,
+      'file' => 'includes/admin.inc',
+  );
+
+
+  return $items;
+}
+
+/**
+ * Implements hook_cron().
+ */
+function simplenews_autoresponder_cron() {
+  
+}
+
+/**
+ * Returns data about terms in Simplenews vocabulary.
+ * 
+ * @return array that can be used as options for select form element.
+ */
+function simplenews_autoresponder_get_tids() {
+  //get simplenews terms
+  $vid = variable_get('simplenews_vid', -1);
+  $terms = db_query("SELECT * FROM {term_data} WHERE vid=%d", $vid);
+  $terms_array = Array();
+  while ($row = db_fetch_array($terms)) {
+    $terms_array[$row['tid']] = t($row['name']);
+  }
+
+  return $terms_array;
+}
+
+/**
+ * Returns info about possible ordering settings.
+ * 
+ * @return Array of possible order fields.
+ */
+function simplenews_autoresponder_get_sort() {
+  return Array(
+      0 => t('nid'),
+      1 => t('updated time'),
+  );
+}
+
+/**
+ * Loads one newsletter from DB and returns it as array.
+ * 
+ * @param $id ID of seq. newsletter to be loaded from DB.
+ * 
+ * @return seq. newsletter as array.
+ */
+function simplenews_autoresponder_get_item($id) {
+  $result = db_query("SELECT * FROM {simplenews_autoresponder} WHERE id = %d AND status <> 2", $id);
+  if ($result) {
+    $item = db_fetch_object($result);
+    return array(
+        'name' => $item->name,
+        'enabled' => $item->status,
+        'tid' => $item->tid,
+        'id' => $item->id,
+        'sort' => $item->sort,
+    );
+  }
+  else {
+    drupal_goto('admin/settings/simplenews_autoresponder');
+  }
+}
+
+/**
+ * Returns all acitve items as an array.
+ * 
+ * @return Array that can be passed to theme_table().
+ */
+function simplenews_get_active_autoresponders() {
+  $data = array();
+  $result = db_query("SELECT *  FROM {simplenews_autoresponder} WHERE status <> 2 ORDER BY id ASC");
+
+  while ($item = db_fetch_object($result)) {
+    $data[] = $item;
+  }
+
+  return $data;
+}
+
+/**
+ * Returns all active autoresponder subscribers for the given autoresponder id
+ */
+function simplenews_get_autoresponder_subscribers($id) {
+  $sql = "SELECT * FROM {simplenews_autoresponder_subscriptions} s WHERE s.autoresponder_id = %d";
+  $result = db_query($sql, $id);
+  $data = array();
+
+  while ($item = db_fetch_object($result)) {
+    $data[] = $item;
+  }
+
+  return $data;
+}
