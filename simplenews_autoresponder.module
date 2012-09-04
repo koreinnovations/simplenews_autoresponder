@@ -66,6 +66,103 @@ function simplenews_autoresponder_cron() {
 }
 
 /**
+ * Implementation of hook_form_alter().
+ */
+function simplenews_autoresponder_form_alter(&$form, $form_state, $form_id) {
+  // If we dont have permission to set the title then we need to abort this alter now!
+  if (!user_access('administer simplenews autoresponders'))
+    return;
+
+  // Check we're editing a node and also check that the node type's 'show field' is enabled
+  if ($form['#id'] == 'node-form') {
+    $terms = simplenews_autoresponder_get_tids();
+
+    if (!empty($terms)) {
+      foreach ($terms as $tid => $term_name) {
+        $autoresponder = simplenews_get_autoresponder_by_tid($tid);
+        if ($autoresponder) {
+          $key = 'simplenews_autoresponder_offset_' . $autoresponder->id;
+          $form[$key] = array(
+              '#type' => 'textfield',
+              '#title' => t('Simplenews autoresponder offset for %name', array('%name' => $autoresponder->name)),
+              '#description' => t("How many days after the user subscribed should this message be sent?"),
+              '#default_value' => $form['#node']->{$key},
+              '#size' => 60,
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function simplenews_autoresponder_nodeapi(&$node, $op, $teaser = NULL, $page = NULL) {
+  switch ($op) {
+    case 'update':
+    case 'insert':
+
+      if (user_access('administer simplenews autoresponders')) {
+
+        $offsets = simplenews_autoresponder_get_message_offsets_by_nid($node->nid);
+        $terms = simplenews_autoresponder_get_tids();
+
+        foreach ($terms as $tid => $term_name) {
+          $autoresponder = simplenews_get_autoresponder_by_tid($tid);
+          $key = 'simplenews_autoresponder_offset_' . $autoresponder->id;
+          if (isset($node->{$key})) {
+            $offset = $node->{$key};
+
+            if (array_key_exists($autoresponder->id, $offsets)) {
+              // update
+              db_query("UPDATE {simplenews_autoresponder_messages} SET offset = %d WHERE nid = %d AND autoresponder_id = %d", $offset, $node->nid, $autoresponder->id);
+            }
+            else {
+              // insert
+              db_query("INSERT INTO {simplenews_autoresponder_messages} (nid, autoresponder_id, offset) VALUES (%d, %d, %d)", $node->nid, $autoresponder->id, $offset);
+            }
+          }
+          else {
+            db_query('DELETE FROM {simplenews_autoresponder_messages} WHERE nid = %d AND autoresponder_id = %d', $node->nid, $autoresponder->id);
+          }
+        }
+      }
+      break;
+
+    case 'delete':
+      db_query('DELETE FROM {simplenews_autoresponder_messages} WHERE nid = %d', $node->nid);
+      break;
+
+    case 'load':
+      $offsets = simplenews_autoresponder_get_message_offsets_by_nid($node->nid);
+      $data = array();
+      foreach ($offsets as $autoresponder_id => $offset) {
+        $data['simplenews_autoresponder_offset_' . $autoresponder_id] = $offset;
+      }
+      return $data;
+  }
+}
+
+/**
+ * Returns an associative array of the autoresponder message offsets for the
+ * given node id.
+ * 
+ * A message can belong to more than one autoresponder.  The array that is returned
+ * is an associative array where the key is the autoresponder id and the value is 
+ * the message offset.
+ */
+function simplenews_autoresponder_get_message_offsets_by_nid($nid) {
+  $sql = 'SELECT * FROM {simplenews_autoresponder_messages} WHERE nid = %d';
+  $result = db_query($sql, $nid);
+  $data = array();
+  while ($item = db_fetch_object($result)) {
+    $data[$item->autoresponder_id] = $item->offset;
+  }
+  return $data;
+}
+
+/**
  * Returns data about terms in Simplenews vocabulary.
  * 
  * @return array that can be used as options for select form element.
@@ -147,4 +244,13 @@ function simplenews_get_autoresponder_subscribers($id) {
   }
 
   return $data;
+}
+
+/**
+ * Returns an autoresponder based on the given term ID
+ */
+function simplenews_get_autoresponder_by_tid($tid) {
+  $sql = "SELECT * FROM {simplenews_autoresponders} WHERE tid = %d";
+  $result = db_fetch_object(db_query($sql, $tid));
+  return $result;
 }

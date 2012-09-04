@@ -1,4 +1,4 @@
 name = Simplenews Autoresponder
 description = Enables Simplenews newsletters to be sent in auto-responder fashion
-core=7.x
+core = 6.x
 dependencies[] = simplenews
