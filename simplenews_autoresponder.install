@@ -40,6 +40,36 @@ function simplenews_autoresponder_schema() {
           ),
       ),
       'primary key' => array('id'),
+      'unique keys' => array(
+          'autoresponder_snid' => array('autoresponder_id', 'snid'),
+      )
+  );
+
+  $schema['simplenews_autoresponder_messages_sent'] = array(
+      'description' => t('Simplenews autoresponder messages'),
+      'fields' => array(
+          'id' => array(
+              'description' => t('Identifies the autoresponder subscriber'),
+              'type' => 'serial',
+              'not null' => TRUE,
+          ),
+          'subscription_id' => array(
+              'description' => t("The autoresponder subscription ID"),
+              'type' => 'int',
+              'not null' => TRUE,
+          ),
+          'message_id' => array(
+              'description' => t("The ID of the autoresponder message"),
+              'type' => 'int',
+              'not null' => TRUE,
+          ),
+          'timestamp' => array(
+              'description' => t("How many days after the user subscribed should this message be sent?"),
+              'type' => 'int',
+              'not null' => TRUE,
+          ),
+      ),
+      'primary key' => array('id'),
   );
 
   $schema['simplenews_autoresponder_messages'] = array(

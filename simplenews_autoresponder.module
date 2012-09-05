@@ -58,11 +58,56 @@ function simplenews_autoresponder_menu() {
   return $items;
 }
 
+function simplenews_autoresponder_get_pending_messages_for_today() {
+  $start_of_day = strtotime(date('m/d/Y')); // today at midnight (0:00:00 am)
+  $end_of_day = $start_of_day + (60 * 60 * 24) - 1; // today at 11:59:59 pm
+  $items = array();
+
+  $query_template = "SELECT sam.*, ss.*, sas.id as subscription_id, sam.id as message_id
+       FROM simplenews_autoresponder_messages sam
+       JOIN simplenews_autoresponder_subscriptions sas 
+         ON sas.autoresponder_id = sam.autoresponder_id
+       JOIN simplenews_subscriptions ss
+         ON ss.snid = sas.snid
+       LEFT JOIN simplenews_autoresponder_messages_sent sams
+         ON sams.subscription_id = sas.id AND sams.message_id = sam.id
+       WHERE ss.timestamp + (sam.offset * 60 * 60 * 24) BETWEEN (%d) AND (%d)
+         AND sams.id IS NULL";
+
+  $result = db_query($query_template, $start_of_day, $end_of_day);
+
+  while ($item = db_fetch_object($result)) {
+    $items[] = $item;
+  }
+
+  return $items;
+}
+
 /**
  * Implements hook_cron().
  */
 function simplenews_autoresponder_cron() {
-  
+  $pending = simplenews_autoresponder_get_pending_messages_for_today();
+  if (!empty($pending)) {
+    module_load_include('inc', 'simplenews', 'includes/simplenews.mail');
+
+    foreach ($pending as $item) {
+      $subscription = simplenews_get_subscription(array('snid' => $item->snid));
+      $autoresponder_subscriber = simplenews_get_autoresponder_subscriber($item->autoresponder_id, $item->snid);
+
+      simplenews_send_node($item->nid, array($subscription));
+
+      $autoresponder_subscriber->last_message_nid = $item->nid;
+      $autoresponder_subscriber->last_message_sent = time();
+      drupal_write_record('simplenews_autoresponder_subscriptions', $autoresponder_subscriber, array('id'));
+
+      $message_log = new stdClass();
+      $message_log->subscription_id = $item->subscription_id;
+      $message_log->message_id = $item->message_id;
+      $message_log->timestamp = time();
+      drupal_write_record('simplenews_autoresponder_messages_sent', $message_log);
+    }
+  }
 }
 
 /**
@@ -78,11 +123,17 @@ function simplenews_autoresponder_form_alter(&$form, $form_state, $form_id) {
     $terms = simplenews_autoresponder_get_tids();
 
     if (!empty($terms)) {
+      $form['simplenews_autoresponder'] = array(
+          '#type' => 'fieldset',
+          '#title' => t('Simplenews Autoresponder(s)'),
+          '#collapsible' => TRUE,
+          '#weight' => -2,
+      );
       foreach ($terms as $tid => $term_name) {
         $autoresponder = simplenews_get_autoresponder_by_tid($tid);
         if ($autoresponder) {
           $key = 'simplenews_autoresponder_offset_' . $autoresponder->id;
-          $form[$key] = array(
+          $form['simplenews_autoresponder'][$key] = array(
               '#type' => 'textfield',
               '#title' => t('Simplenews autoresponder offset for %name', array('%name' => $autoresponder->name)),
               '#description' => t("How many days after the user subscribed should this message be sent?"),
@@ -199,7 +250,7 @@ function simplenews_autoresponder_get_sort() {
  * @return seq. newsletter as array.
  */
 function simplenews_autoresponder_get_item($id) {
-  $result = db_query("SELECT * FROM {simplenews_autoresponder} WHERE id = %d AND status <> 2", $id);
+  $result = db_query("SELECT * FROM {simplenews_autoresponders} WHERE id = %d AND status <> 2", $id);
   if ($result) {
     $item = db_fetch_object($result);
     return array(
@@ -222,7 +273,7 @@ function simplenews_autoresponder_get_item($id) {
  */
 function simplenews_get_active_autoresponders() {
   $data = array();
-  $result = db_query("SELECT *  FROM {simplenews_autoresponder} WHERE status <> 2 ORDER BY id ASC");
+  $result = db_query("SELECT * FROM {simplenews_autoresponders} WHERE status != 2 ORDER BY id ASC");
 
   while ($item = db_fetch_object($result)) {
     $data[] = $item;
@@ -253,4 +304,48 @@ function simplenews_get_autoresponder_by_tid($tid) {
   $sql = "SELECT * FROM {simplenews_autoresponders} WHERE tid = %d";
   $result = db_fetch_object(db_query($sql, $tid));
   return $result;
+}
+
+/**
+ * Returns all active autoresponder subscribers for the given autoresponder id
+ */
+function simplenews_get_autoresponder_subscriber($autoresponder_id, $snid) {
+  $sql = "SELECT * FROM {simplenews_autoresponder_subscriptions} s WHERE s.autoresponder_id = %d and s.snid = %d";
+  $result = db_query($sql, $autoresponder_id, $snid);
+  return db_fetch_object($result);
+}
+
+function simplenews_autoresponder_add_subscription($autoresponder_id, $snid) {
+  $subscriber = simplenews_get_autoresponder_subscriber($autoresponder_id, $snid);
+  if (!$subscriber) {
+    db_query("INSERT INTO {simplenews_autoresponder_subscriptions} (autoresponder_id, snid, last_message_nid, last_message_sent) VALUES (%d, %d, %d, %d)", $autoresponder_id, $snid, 0, 0);
+  }
+}
+
+function simplenews_autoresponder_delete_subscription($autoresponder_id, $snid) {
+  db_query("DELETE FROM {simplenews_autoresponder_subscriptions} WHERE autoresponder_id = %d AND snid = %d", $autoresponder_id, $snid);
+}
+
+/**
+ * Implements hook_simplenews_subscribe_user().
+ */
+function simplenews_autoresponder_simplenews_subscribe_user(&$subscription) {
+  foreach ($subscription->tids as $tid) {
+    $autoresponder = simplenews_get_autoresponder_by_tid($tid);
+    if ($autoresponder) {
+      simplenews_autoresponder_add_subscription($autoresponder->id, $subscription->snid);
+    }
+  }
+}
+
+/**
+ * Implements hook_simplenews_unsubscribe_user().
+ */
+function simplenews_autoresponder_simplenews_unsubscribe_user(&$subscription) {
+  foreach ($subscription->tids as $tid) {
+    $autoresponder = simplenews_get_autoresponder_by_tid($tid);
+    if ($autoresponder) {
+      simplenews_autoresponder_delete_subscription($autoresponder->id, $subscription->snid);
+    }
+  }
 }

@@ -94,6 +94,14 @@ function simplenews_autoresponder_admin_edit(&$form_state, $id = -1) {
       '#required' => TRUE,
   );
 
+  if ($id == -1) {
+    $form['add_existing_subscribers'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Add existing subscribers to this autoresponder'),
+        '#default_value' => TRUE,
+    );
+  }
+
   $form['item_id'] = array(
       '#type' => 'hidden',
       '#value' => $id,
@@ -115,13 +123,12 @@ function simplenews_autoresponder_admin_edit(&$form_state, $id = -1) {
 
 function simplenews_autoresponder_admin_edit_submit(&$form, &$form_state) {
   // Prepare data for DB.
-  $insert = array(
-      'name' => $form_state['values']['name'],
-      'tid' => $form_state['values']['tid'],
-      'send_interval' => $form_state['values']['interval'],
-      'status' => $form_state['values']['enabled'],
-      'sort' => $form_state['values']['sort'],
-  );
+  $insert = new stdClass();
+  $insert->name = $form_state['values']['name'];
+  $insert->tid = $form_state['values']['tid'];
+  $insert->status = $form_state['values']['enabled'];
+  $insert->sort = $form_state['values']['sort'];
+
 
   // Write to DB.
   $db_response = '';
@@ -136,20 +143,28 @@ function simplenews_autoresponder_admin_edit_submit(&$form, &$form_state) {
   // Verbose message.
   if ($db_response) {
     drupal_set_message(t("Autoresponder <em>@name</em> was successfully saved.", array('@name' => $form_state['values']['name'])));
+
+    if ($form_state['values']['add_existing_subscribers']) {
+      $sql = "SELECT snid FROM {simplenews_snid_tid} WHERE tid = %d AND status = 1";
+      $result = db_query($sql, $form_state['values']['tid']);
+      while ($o = db_fetch_object($result)) {
+        simplenews_autoresponder_add_subscription($insert->id, $o->snid);
+      }
+    }
   }
   else {
     drupal_set_message(t("An error occured while trying to save <em>@name</em>.", array('@name' => $form_state['values']['name'])), 'error');
   }
 
   // Redirect back to basic configuration.
-  $form_state['redirect'] = 'admin/settings/simplenews_autoresponders';
+  $form_state['redirect'] = 'admin/settings/simplenews_autoresponder';
 }
 
 /**
  * Delete callback.
  */
 function simplenews_autoresponder_admin_delete(&$form_state, $id) {
-  $result = db_query("SELECT name FROM {simplenews_autoresponder} WHERE id = %d", $id);
+  $result = db_query("SELECT name FROM {simplenews_autoresponders} WHERE id = %d", $id);
   $result = db_fetch_array($result);
 
   $form['id'] = array(
@@ -163,7 +178,7 @@ function simplenews_autoresponder_admin_delete(&$form_state, $id) {
 
 function simplenews_autoresponder_admin_delete_submit(&$form, &$form_state) {
   if ($form_state['values']['confirm']) {
-    db_query("UPDATE {simplenews_autoresponder} SET status=2 WHERE id=%d", $form_state['values']['id']);
+    db_query("UPDATE {simplenews_autoresponders} SET status=2 WHERE id=%d", $form_state['values']['id']);
   }
 
   $form_state['redirect'] = 'admin/settings/simplenews_autoresponder';
