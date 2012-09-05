@@ -231,18 +231,6 @@ function simplenews_autoresponder_get_tids() {
 }
 
 /**
- * Returns info about possible ordering settings.
- * 
- * @return Array of possible order fields.
- */
-function simplenews_autoresponder_get_sort() {
-  return Array(
-      0 => t('nid'),
-      1 => t('updated time'),
-  );
-}
-
-/**
  * Loads one newsletter from DB and returns it as array.
  * 
  * @param $id ID of seq. newsletter to be loaded from DB.
@@ -258,7 +246,6 @@ function simplenews_autoresponder_get_item($id) {
         'enabled' => $item->status,
         'tid' => $item->tid,
         'id' => $item->id,
-        'sort' => $item->sort,
     );
   }
   else {

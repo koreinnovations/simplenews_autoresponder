@@ -85,15 +85,6 @@ function simplenews_autoresponder_admin_edit(&$form_state, $id = -1) {
       '#required' => TRUE,
   );
 
-  $form['sort'] = array(
-      '#type' => 'select',
-      '#title' => t('Sorting field'),
-      '#default_value' => isset($old_data['sort']) ? $old_data['sort'] : 0,
-      '#options' => simplenews_autoresponder_get_sort(),
-      '#description' => t("Which field to use for ordering newsletter issues."),
-      '#required' => TRUE,
-  );
-
   if ($id == -1) {
     $form['add_existing_subscribers'] = array(
         '#type' => 'checkbox',
@@ -127,7 +118,6 @@ function simplenews_autoresponder_admin_edit_submit(&$form, &$form_state) {
   $insert->name = $form_state['values']['name'];
   $insert->tid = $form_state['values']['tid'];
   $insert->status = $form_state['values']['enabled'];
-  $insert->sort = $form_state['values']['sort'];
 
 
   // Write to DB.

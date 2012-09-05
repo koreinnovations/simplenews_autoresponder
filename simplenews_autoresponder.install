@@ -129,13 +129,6 @@ function simplenews_autoresponder_schema() {
               'not null' => TRUE,
               'default' => 1,
           ),
-          'sort' => array(
-              'type' => 'int',
-              'size' => 'tiny',
-              'not null' => TRUE,
-              'default' => 0,
-              'description' => 'Tells how to determine order of issues: 0 - by nid, 1 - update timestamp.',
-          ),
       ),
       'primary key' => array('id'),
       'unique keys' => array(
@@ -144,4 +137,13 @@ function simplenews_autoresponder_schema() {
   );
 
   return $schema;
+}
+
+/**
+ * Remove 'sort' column from {simplenews_autoresponders}
+ */
+function simplenews_autoresponder_update_6000() {
+  $items = array();
+  $items[] = update_sql('ALTER TABLE {simplenews_autoresponders} DROP COLUMN sort');
+  return $items;
 }
